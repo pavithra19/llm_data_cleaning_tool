@@ -1,0 +1,287 @@
+\documentclass[11pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{url}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{listings}
+\usepackage{xcolor}
+
+% Code listing style
+\lstset{
+    basicstyle=\ttfamily\small,
+    breaklines=true,
+    frame=single,
+    backgroundcolor=\color{gray!10},
+    commentstyle=\color{green!50!black},
+    keywordstyle=\color{blue},
+    stringstyle=\color{red},
+    showstringspaces=false,
+    columns=flexible
+}
+
+\title{\textbf{LLMs for Automated Data Cleaning: Improving Data Quality with AI Assistance}}
+\author{Pavithra Purushothaman \\ Matrikel Nummer: 1535949 \\ fd0001571}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+When I work with data, I usually spend more time cleaning it than actually analyzing it. Fixing missing values, duplicates and inconsistent formats always slows me down. I wanted to see if a language model could help me with this process, not by automatically changing my data, but by giving me advice on what might be wrong. So I built a small tool that checks a dataset with pandas, then creates a summary of the whole dataset and sends a random sample to a local model to get suggestions. The tool only reports issues, and I stay in control of the cleaning decisions. I tested it on both synthetic and real data. Pandas always caught the obvious problems, while the model often pointed out things like inconsistent formatting or suspicious values. Everything runs locally, which keeps the data private. It’s not a perfect solution, but it convinced me that AI can be a useful helper for data cleaning.
+\end{abstract}
+
+\section{Introduction}
+
+For me, data cleaning is always the hardest and most boring part of a project. A file that looks fine at first usually hides problems: different date formats, numbers saved as text, extra spaces or repeated rows. It takes a lot of time and attention to find and fix everything.
+
+At the same time, language models have become good at spotting patterns and explaining them. I started wondering if I could use one to speed up the cleaning process. My idea was simple: let the model suggest issues and fixes, but don’t let it directly change the data. That way, I get help but still keep control.
+
+To try this out, I built a small prototype. The workflow is: upload a CSV, run some quick checks with pandas. I also added a dataset summary step, so the model sees column statistics (like missing values, unique counts, and ranges) along with a sample of rows. The results are shown in a simple Gradio interface. This setup gave me a way to compare what pandas found with what the model suggested.
+
+\section{What Others Have Done}
+
+There are many existing tools that help with data cleaning. Excel has data validation and libraries like \texttt{pandas-profiling} can quickly detect missing values, duplicates or basic type errors. These are useful, but they usually stop at the obvious issues.
+
+More advanced approaches try to automate transformations with AI. Some tools even let you describe what you want in plain English and the model generates code to clean the data. The problem is that if the AI makes a mistake, it might silently change values in a way we won’t notice.
+
+That’s exactly what I wanted to avoid. My approach is lighter: the AI doesn’t touch the data, it only gives suggestions. I think this is a safer way to use it, because I can review the output and decide what to apply.
+
+\section{How My Tool Works}
+
+The tool works in three steps:
+
+\begin{enumerate}
+    \item First, it reads the CSV and runs baseline checks with pandas. This includes looking for missing values and duplicate rows.
+    \item Second, it builds a compact summary of all columns and sends that, plus up to 50 random rows, to the local model to a local AI model with a clear prompt: list possible issues, suggest cleaning steps, and add any notes.
+    \item Finally, it shows both the pandas report and the model’s response in the web interface. I can also generate a “cleaned” version of the file where only safe fixes are applied, like trimming spaces or removing duplicates.
+\end{enumerate}
+
+Everything runs locally with Ollama and the Gemma 2B model, so the data never leaves my machine. I built the interface with Gradio, which made it quick to put together.
+
+\subsection{Technical Architecture}
+
+Figure \ref{fig:architecture} shows how the components connect.
+
+\begin{figure}[h]
+\centering
+\begin{verbatim}
+    User Uploads CSV
+       ↓
+    Gradio Interface
+       ↓
+    Pandas Analysis
+    (missing values, duplicates)
+       ↓
+    Construct AI Prompt
+    (columns + sample rows)
+       ↓
+    Ollama Local AI
+    (Gemma 2B model)
+       ↓
+    Display Results
+    (baseline + AI suggestions)
+       ↓
+    Optional: Download
+    Cleaned CSV
+\end{verbatim}
+\caption{Flow from file upload to results}
+\label{fig:architecture}
+\end{figure}
+
+\section{How I Tested It}
+
+I tested the tool with two types of datasets:  
+\begin{itemize}
+    \item A synthetic dataset of 20,000 rows where I manually added problems like inconsistent dates, numbers saved as text, missing values, and duplicates.  
+    \item A smaller real dataset to see how it performs on actual messy data.  
+\end{itemize}
+
+For each run, I checked how long it took, what pandas reported, what the model suggested, and whether those suggestions made sense. I also looked at the automatically cleaned output to see what got fixed.
+
+The Gemma 2B model is small, so it runs fast on a laptop. It’s not the smartest model available, but it was good enough for this purpose.
+
+\section{What I Found}
+
+The baseline checks were reliable for obvious problems like missing values and duplicates. The model often added extra insight, like spotting inconsistent formats, outliers or numeric columns saved as strings. 
+
+For example, in my sample dataset, the model pointed out that a price column looked like text because of dollar signs and that dates were mixed between two formats. These are exactly the kinds of details that usually take me longer to notice.
+
+The tool usually responded within 10–20 seconds, which felt fast enough. The first run required downloading the model, but after that it worked offline. The safe cleaning step handled simple fixes correctly and avoided risky changes.
+
+\subsection{Example Output}
+
+\begin{lstlisting}[caption=Sample Output]
+--- Baseline ---
+
+Pandas baseline detected: Missing values found, Duplicate rows found
+
+--- LLM Suggestions ---
+
+**1) Possible data quality issues:**
+- Date column has inconsistent formats
+- Price column stored as text with dollar signs
+- Some product names have extra spaces
+- Quantity column has very large values
+
+**2) Cleaning steps:**
+- Standardize dates
+- Remove dollar signs and convert price to numeric
+- Trim whitespace from product names
+- Review high quantity values
+
+**3) Additional notes:**
+- Dataset summary + random sample (up to 50 rows) provided to the model, full dataset coverage is summarized via stats
+- Domain-specific checks may be needed
+
+_Time taken: 3.2s_
+\end{lstlisting}
+
+\section{What This Means}
+
+From my tests, I think AI can be a good assistant for data cleaning, but only when it stays in an advisory role. If the model directly changed the data, I wouldn’t trust it. But as a helper that points out possible issues, it saves time and gives me ideas for what to check.
+
+The tool is not perfect. The model doesn’t see every row directly, but it does get a full dataset summary plus a representative random sample (up to 50 rows). This way it can suggest column-level issues while still being limited by its context size. It also doesn’t understand the meaning of the data, so it can’t flag domain-specific errors. But even with these limits, it still gave useful hints.
+
+\section{Technical Details}
+
+The main tools I used were:
+\begin{itemize}
+    \item \textbf{Pandas} for reading files and baseline checks  
+    \item \textbf{Gradio} for the web interface  
+    \item \textbf{Ollama} to run the model locally  
+    \item Standard Python libraries for handling files and timing  
+\end{itemize}
+
+The AI prompt was designed to keep answers short and practical. It asked for three sections (issues, steps, notes) and explicitly told the model not to make things up or include code.
+
+The cleaning routine is conservative. It trims text, tries to convert obvious numbers and dates, and removes duplicates. If something is uncertain, it leaves it unchanged. This keeps the output safe and predictable.
+
+If the AI fails or times out, the tool still shows the baseline results, so it’s still useful.
+
+\subsection{Code Structure}
+
+\begin{lstlisting}[language=Python, caption=Main Analysis Function]
+def analyze_file(file):
+    df = pd.read_csv(file.name)
+    issues = []
+    if df.isnull().sum().sum() > 0:
+        issues.append("Missing values found")
+    if df.duplicated().sum() > 0:
+        issues.append("Duplicate rows found")
+    
+    prompt = f"""
+    Dataset summary: [stats for each column]
+    Random sample of up to 50 rows:
+    {sample_df.to_string(index=False)}
+    
+    Write your answer in these sections:
+    **1) Possible data quality issues**
+    **2) Cleaning steps**
+    **3) Additional notes**
+    """
+    
+    llm_response = query_ollama(prompt, model="gemma:2b")
+    return baseline_report, llm_response
+\end{lstlisting}
+
+\section{How to Reproduce My Results}
+
+To run the tool, you need:
+\begin{itemize}
+    \item Python 3.7 or newer  
+    \item pandas, gradio, and other required libraries  
+    \item Ollama installed locally  
+    \item The Gemma 2B model (or another model) downloaded  
+\end{itemize}
+
+The steps are in the README. Once installed, you can upload any CSV and test it. The results are deterministic for the cleaning step, so running it again on the same file will give the same output.
+
+\section{Conclusion}
+
+This project showed me that AI can be helpful for data cleaning if it is used carefully. My prototype combines simple pandas checks with model suggestions, giving me both reliable detection of obvious problems and hints about trickier issues.
+
+The tool is not complete, but it works well enough to show the potential. I plan to keep experimenting with better models, more cleaning steps, and maybe ways to let users give feedback. For now, it already makes data cleaning less painful and keeps me in control of the process.
+
+\section{Reflection}
+
+Working on this project showed me both the strengths and weaknesses of using language models for data cleaning. On the positive side, the model was able to spot issues that are hard to catch with simple rules like inconsistent formatting or suspicious values. It often gave me concrete suggestions that matched what I would have done manually. This confirmed my idea that AI can act as a useful assistant.
+
+At the same time, the project also made the limitations very clear. The model sometimes missed issues that I expected it to catch, especially if they did not appear in the sample rows. It also cannot understand the meaning of the data, so it might suggest changes that look correct technically but do not make sense in context. For example, it cannot know whether a very high number is a real outlier or just a valid value.
+
+Another lesson was about prompt design. I learned that if the instructions are too vague, the model will produce long or speculative answers. By making the prompt specific and structured, I could reduce this problem and get more practical results.
+
+Overall, I see the tool as a step in the right direction. It is not something that replaces human effort, but it makes the first stage of cleaning easier for us. For future work, I would like to test larger models, integrate more systematic validation checks and experiment with ways for the tool to learn from user feedback. This would bring it closer to a reliable assistant that adapts to real world needs.
+
+\bibliographystyle{plain}
+\bibliography{authors}
+
+\cite{abedjan2016detecting, polyzotis2017data, wang1996beyond}
+
+\appendix
+
+\section{The AI Prompt}
+
+\begin{lstlisting}[caption=AI Prompt Template]
+You are a data cleaning assistant.
+
+Dataset summary (entire file):
+{dataset_summary}
+
+Random sample of rows (up to 50):
+{sample_df.to_string(index=False)}
+
+Write your answer in exactly 3 sections:
+**1) Possible data quality issues**
+- short bullet points
+**2) Cleaning steps**
+- practical actions
+**3) Additional notes**
+- limits or cautions
+
+Rules:
+- Do not invent columns or values
+- Do not include code
+- Keep it short and clear
+\end{lstlisting}
+
+\section{What the Automatic Cleaner Does}
+
+\begin{enumerate}
+    \item Trim spaces in text columns  
+    \item Try converting numeric looking columns to numbers  
+    \item Try parsing date like columns as dates  
+    \item Remove duplicate rows  
+    \item Save the cleaned result as a new CSV  
+\end{enumerate}
+
+If a step is uncertain, the cleaner leaves the data unchanged.
+
+\section{Step by Step Results}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.8\linewidth]{Screenshot 2025-09-30 at 00.32.31.png}
+\caption{Step 1: Upload a CSV file}
+\label{fig:step1}
+\end{figure}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.8\linewidth]{Screenshot 2025-09-30 at 00.32.56.png}
+\caption{Step 2: Pandas + LLM analysis}
+\label{fig:step2}
+\end{figure}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.8\linewidth]{Screenshot 2025-09-30 at 00.33.57.png}
+\caption{Step 3: Analysis Result and cleaned CSV}
+\label{fig:step3}
+\end{figure}
+\end{document}
